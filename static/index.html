@@ -30,6 +30,8 @@
   </h1>
 </header>
 <div class="container">
+
+  <!-- Quick examples -->
   <div class="card">
     <div>أمثلة سريعة:
       <span class="pill" data-q="مرحبا">مرحبا</span>
@@ -39,6 +41,7 @@
     </div>
   </div>
 
+  <!-- Chat & LLM -->
   <div class="row">
     <div class="col card">
       <label>الدردشة (Nikola API)</label>
@@ -48,15 +51,33 @@
         <button id="send">إرسال</button>
       </div>
     </div>
+    <div class="col card">
+      <label>LLM Chat (Stub)</label>
+      <div id="llmChat" class="chat"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="qLlm" placeholder="اكتب رسالة LLM…"/>
+        <button id="sendLlm">إرسال</button>
+      </div>
+    </div>
+  </div>
 
+  <!-- BoQ JSON + CSV -->
+  <div class="row">
     <div class="col card">
       <label>BoQ (JSON)</label>
       <textarea id="boq" rows="10">{"items":[{"item":"Excavation","qty":120,"unit_price":15},{"item":"Concrete","qty":30,"unit_price":220},{"item":"Rebar","qty":1.8,"unit_price":2800}]}</textarea>
       <button id="calc">احسب عبر /api/boq/total</button>
       <div id="boqOut" style="margin-top:8px"></div>
     </div>
+    <div class="col card">
+      <label>BoQ CSV Upload</label>
+      <input type="file" id="boqFile"/>
+      <button id="uploadCsv">رفع وحساب</button>
+      <div id="csvOut" style="margin-top:8px"></div>
+    </div>
   </div>
 
+  <!-- EVM -->
   <div class="card">
     <label>حساب EVM عبر /api/evm</label>
     <div class="row">
@@ -68,10 +89,34 @@
     <div id="evmOut" style="margin-top:8px"></div>
   </div>
 
-  <div class="card">
-    <strong>أين ChatGPT؟</strong>
-    <p>هذه النسخة تعمل محليًا وتستخدم <em>Nikola</em> (محرك ردود مبسّط). لدمج ChatGPT الحقيقي نحتاج مفتاح API وتفعيل نموذج مناسب، ثم نضيف نقطة <code>/api/chatgpt</code> تستدعي السحابة. الآن نعرض <em>Stub</em> يعمل داخل الجهاز.</p>
+  <!-- Memory -->
+  <div class="row">
+    <div class="col card">
+      <label>Memory PUT</label>
+      <input id="memKey" placeholder="Key"/>
+      <input id="memValue" placeholder="Value (JSON)"/>
+      <button id="memPut">حفظ</button>
+      <div id="memPutOut" style="margin-top:8px"></div>
+    </div>
+    <div class="col card">
+      <label>Memory GET</label>
+      <input id="memGetKey" placeholder="Key"/>
+      <button id="memGet">جلب</button>
+      <div id="memGetOut" style="margin-top:8px"></div>
+    </div>
   </div>
+
+  <!-- Agent -->
+  <div class="card">
+    <label>Agent Plan / Run</label>
+    <input id="agentGoal" placeholder="Goal e.g., calculate EVM"/>
+    <button id="agentPlan">Plan</button>
+    <textarea id="agentPlanOut" rows="3" readonly style="margin-top:6px;"></textarea>
+    <textarea id="agentRunData" rows="5" placeholder='{"type":"evm","data":{"PV":100,"EV":120,"AC":110}}'></textarea>
+    <button id="agentRun">Run</button>
+    <div id="agentRunOut" style="margin-top:6px"></div>
+  </div>
+
 </div>
 
 <script>
@@ -81,37 +126,44 @@ async function ping(){
     const r = await fetch('/api/health');
     const j = await r.json();
     statusEl.textContent = `${j.status} · ${j.engine}`;
-  }catch(e){
-    statusEl.textContent = 'غير متصل (شغّل الخادم)';
-  }
+  }catch(e){ statusEl.textContent = 'غير متصل (شغّل الخادم)'; }
 }
 ping();
 
+// ---------------- Chat Nikola ----------------
 const chat = document.getElementById('chat');
-function add(role, text){
+function add(role, text, el=chat){
   const div = document.createElement('div');
   div.className = 'msg ' + (role==='you'?'you':'bot');
   div.textContent = (role==='you'?'أنت: ':'Nikola: ') + text;
-  chat.appendChild(div); chat.scrollTop = chat.scrollHeight;
+  el.appendChild(div); el.scrollTop = el.scrollHeight;
 }
-document.querySelectorAll('.pill').forEach(p=>p.onclick=()=>{
-  const q = p.getAttribute('data-q'); send(q);
-});
-document.getElementById('send').onclick = ()=>{
-  const v = document.getElementById('q').value; send(v); document.getElementById('q').value='';
-};
-
+document.querySelectorAll('.pill').forEach(p=>p.onclick=()=>{ send(p.getAttribute('data-q')); });
+document.getElementById('send').onclick = ()=>{ const v=document.getElementById('q').value; send(v); document.getElementById('q').value=''; };
 async function send(v){
   add('you', v);
   try{
     const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:v})});
     const j = await r.json();
     add('bot', j.reply);
-  }catch(e){
-    add('bot', 'تعذر الاتصال بالخادم. تأكد أنه يعمل.');
-  }
+  }catch(e){ add('bot','تعذر الاتصال بالخادم.'); }
 }
 
+// ---------------- Chat LLM ----------------
+const llmChat = document.getElementById('llmChat');
+document.getElementById('sendLlm').onclick = ()=>{
+  const v = document.getElementById('qLlm').value; sendLlm(v); document.getElementById('qLlm').value='';
+};
+async function sendLlm(v){
+  add('you', v, llmChat);
+  try{
+    const r = await fetch('/api/chat/llm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:v}]})});
+    const j = await r.json();
+    add('bot', j.reply, llmChat);
+  }catch(e){ add('bot','تعذر الاتصال بالـLLM.', llmChat); }
+}
+
+// ---------------- BoQ JSON ----------------
 document.getElementById('calc').onclick = async ()=>{
   try{
     const payload = JSON.parse(document.getElementById('boq').value);
@@ -119,26 +171,71 @@ document.getElementById('calc').onclick = async ()=>{
     const j = await r.json();
     let html = `<div>الإجمالي: <b>${j.total}</b></div><ul>`;
     j.breakdown.forEach(it=> html += `<li>${it.item}: ${it.cost}</li>`);
-    html += `</ul>`;
-    document.getElementById('boqOut').innerHTML = html;
-  }catch(e){
-    document.getElementById('boqOut').textContent = 'صيغة JSON غير صحيحة أو الخادم غير متصل.';
-  }
+    html += `</ul>`; document.getElementById('boqOut').innerHTML = html;
+  }catch(e){ document.getElementById('boqOut').textContent = 'صيغة JSON غير صحيحة أو الخادم غير متصل.'; }
 };
 
+// ---------------- BoQ CSV Upload ----------------
+document.getElementById('uploadCsv').onclick = async ()=>{
+  const f = document.getElementById('boqFile').files[0]; if(!f) return alert('اختر ملف CSV');
+  const fd = new FormData(); fd.append('file', f);
+  try{
+    const r = await fetch('/api/boq/upload',{method:'POST',body:fd});
+    const j = await r.json();
+    document.getElementById('csvOut').textContent = `Rows: ${j.rows}, Total: ${j.total}`;
+  }catch(e){ document.getElementById('csvOut').textContent='فشل رفع CSV أو الخادم غير متصل.'; }
+};
+
+// ---------------- EVM ----------------
 document.getElementById('evmBtn').onclick = async ()=>{
   const PV = parseFloat(document.getElementById('pv').value);
   const EV = parseFloat(document.getElementById('ev').value);
   const ACv = document.getElementById('ac').value.trim();
   const AC = ACv? parseFloat(ACv): null;
   try{
-    const r = await fetch('/api/evm',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({PV,EV,AC})});
+    const r = await fetch('/api/evm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({PV,EV,AC})});
     const j = await r.json();
     document.getElementById('evmOut').textContent = `SPI=${j.SPI}` + (j.CPI? `  ·  CPI=${j.CPI}` : '') + `  ·  ${j.status}`;
-  }catch(e){
-    document.getElementById('evmOut').textContent='فشل الاتصال بالخادم.';
-  }
+  }catch(e){ document.getElementById('evmOut').textContent='فشل الاتصال بالخادم.'; }
+};
+
+// ---------------- Memory ----------------
+document.getElementById('memPut').onclick = async ()=>{
+  try{
+    const key = document.getElementById('memKey').value;
+    const value = JSON.parse(document.getElementById('memValue').value);
+    const r = await fetch('/api/memory/put',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,value})});
+    const j = await r.json();
+    document.getElementById('memPutOut').textContent = `Saved key=${j.key}, updated_at=${j.updated_at}`;
+  }catch(e){ document.getElementById('memPutOut').textContent='خطأ في JSON أو الخادم.'; }
+};
+
+document.getElementById('memGet').onclick = async ()=>{
+  try{
+    const key = document.getElementById('memGetKey').value;
+    const r = await fetch('/api/memory/get?key='+encodeURIComponent(key));
+    const j = await r.json();
+    document.getElementById('memGetOut').textContent = JSON.stringify(j, null, 2);
+  }catch(e){ document.getElementById('memGetOut').textContent='المفتاح غير موجود أو الخادم غير متصل.'; }
+};
+
+// ---------------- Agent ----------------
+document.getElementById('agentPlan').onclick = async ()=>{
+  const g = document.getElementById('agentGoal').value;
+  try{
+    const r = await fetch('/api/agent/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({goal:g})});
+    const j = await r.json();
+    document.getElementById('agentPlanOut').value = JSON.stringify(j, null, 2);
+  }catch(e){ document.getElementById('agentPlanOut').value='فشل الاتصال بالخادم.'; }
+};
+
+document.getElementById('agentRun').onclick = async ()=>{
+  try{
+    const payload = JSON.parse(document.getElementById('agentRunData').value);
+    const r = await fetch('/api/agent/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const j = await r.json();
+    document.getElementById('agentRunOut').textContent = JSON.stringify(j, null, 2);
+  }catch(e){ document.getElementById('agentRunOut').textContent='فشل الاتصال بالخادم أو JSON غير صالح.'; }
 };
 </script>
 </body>
