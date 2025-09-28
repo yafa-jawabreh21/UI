@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>ui9 + Nikola — Demo</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif;background:#0b1220;color:#e8eefc;margin:0}
+    header{padding:16px 20px;background:#111a2f;position:sticky;top:0;border-bottom:1px solid #23304f}
+    h1{margin:0;font-size:18px}
+    .container{max-width:980px;margin:0 auto;padding:18px}
+    .card{background:#0f1830;border:1px solid #22345a;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 0 0 1px #0b1220 inset}
+    label{display:block;margin-bottom:6px;color:#b7c6f2}
+    input,textarea,button{width:100%;padding:10px;border-radius:10px;border:1px solid #2a3e6e;background:#0b1328;color:#e8eefc}
+    button{cursor:pointer}
+    .chat{height:240px;overflow:auto;background:#0b1328;border:1px solid #253a6b;border-radius:10px;padding:10px;white-space:pre-wrap}
+    .msg{margin:6px 0}
+    .you{color:#a8ffc6}
+    .bot{color:#ffd48a}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .col{flex:1;min-width:300px}
+    .pill{display:inline-block;padding:4px 8px;border:1px solid #384e82;border-radius:999px;margin:2px;cursor:pointer}
+    .badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#0b1328;border:1px solid #2a3e6e;margin-left:6px}
+  </style>
+</head>
+<body>
+<header>
+  <h1>ui9 + <span style="color:#7dd3fc">Nikola</span> — نسخة حيّة على API محلي
+    <span class="badge" id="status">…</span>
+  </h1>
+</header>
+<div class="container">
+  <div class="card">
+    <div>أمثلة سريعة:
+      <span class="pill" data-q="مرحبا">مرحبا</span>
+      <span class="pill" data-q="احسب SPI إذا PV=100 و EV=120 و AC=110">EVM</span>
+      <span class="pill" data-q="200 + 35.5">حساب</span>
+      <span class="pill" data-q="BoQ">BoQ</span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col card">
+      <label>الدردشة (Nikola API)</label>
+      <div id="chat" class="chat"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="q" placeholder="اكتب سؤالك هنا…"/>
+        <button id="send">إرسال</button>
+      </div>
+    </div>
+
+    <div class="col card">
+      <label>BoQ (JSON)</label>
+      <textarea id="boq" rows="10">{"items":[{"item":"Excavation","qty":120,"unit_price":15},{"item":"Concrete","qty":30,"unit_price":220},{"item":"Rebar","qty":1.8,"unit_price":2800}]}</textarea>
+      <button id="calc">احسب عبر /api/boq/total</button>
+      <div id="boqOut" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>حساب EVM عبر /api/evm</label>
+    <div class="row">
+      <div class="col"><input id="pv" placeholder="PV (مثال 100)"/></div>
+      <div class="col"><input id="ev" placeholder="EV (مثال 120)"/></div>
+      <div class="col"><input id="ac" placeholder="AC (اختياري مثال 110)"/></div>
+    </div>
+    <button id="evmBtn" style="margin-top:8px">احسب SPI/CPI</button>
+    <div id="evmOut" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card">
+    <strong>أين ChatGPT؟</strong>
+    <p>هذه النسخة تعمل محليًا وتستخدم <em>Nikola</em> (محرك ردود مبسّط). لدمج ChatGPT الحقيقي نحتاج مفتاح API وتفعيل نموذج مناسب، ثم نضيف نقطة <code>/api/chatgpt</code> تستدعي السحابة. الآن نعرض <em>Stub</em> يعمل داخل الجهاز.</p>
+  </div>
+</div>
+
+<script>
+const statusEl = document.getElementById('status');
+async function ping(){
+  try{
+    const r = await fetch('/api/health');
+    const j = await r.json();
+    statusEl.textContent = `${j.status} · ${j.engine}`;
+  }catch(e){
+    statusEl.textContent = 'غير متصل (شغّل الخادم)';
+  }
+}
+ping();
+
+const chat = document.getElementById('chat');
+function add(role, text){
+  const div = document.createElement('div');
+  div.className = 'msg ' + (role==='you'?'you':'bot');
+  div.textContent = (role==='you'?'أنت: ':'Nikola: ') + text;
+  chat.appendChild(div); chat.scrollTop = chat.scrollHeight;
+}
+document.querySelectorAll('.pill').forEach(p=>p.onclick=()=>{
+  const q = p.getAttribute('data-q'); send(q);
+});
+document.getElementById('send').onclick = ()=>{
+  const v = document.getElementById('q').value; send(v); document.getElementById('q').value='';
+};
+
+async function send(v){
+  add('you', v);
+  try{
+    const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:v})});
+    const j = await r.json();
+    add('bot', j.reply);
+  }catch(e){
+    add('bot', 'تعذر الاتصال بالخادم. تأكد أنه يعمل.');
+  }
+}
+
+document.getElementById('calc').onclick = async ()=>{
+  try{
+    const payload = JSON.parse(document.getElementById('boq').value);
+    const r = await fetch('/api/boq/total',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const j = await r.json();
+    let html = `<div>الإجمالي: <b>${j.total}</b></div><ul>`;
+    j.breakdown.forEach(it=> html += `<li>${it.item}: ${it.cost}</li>`);
+    html += `</ul>`;
+    document.getElementById('boqOut').innerHTML = html;
+  }catch(e){
+    document.getElementById('boqOut').textContent = 'صيغة JSON غير صحيحة أو الخادم غير متصل.';
+  }
+};
+
+document.getElementById('evmBtn').onclick = async ()=>{
+  const PV = parseFloat(document.getElementById('pv').value);
+  const EV = parseFloat(document.getElementById('ev').value);
+  const ACv = document.getElementById('ac').value.trim();
+  const AC = ACv? parseFloat(ACv): null;
+  try{
+    const r = await fetch('/api/evm',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({PV,EV,AC})});
+    const j = await r.json();
+    document.getElementById('evmOut').textContent = `SPI=${j.SPI}` + (j.CPI? `  ·  CPI=${j.CPI}` : '') + `  ·  ${j.status}`;
+  }catch(e){
+    document.getElementById('evmOut').textContent='فشل الاتصال بالخادم.';
+  }
+};
+</script>
+</body>
+</html>
